@@ -25,6 +25,9 @@ def compute_features(aq_df: pd.DataFrame, weather_df: pd.DataFrame) -> pd.DataFr
             f"input ({min(aq_rows, weather_rows)}). Possible time alignment problem."
         )
 
+    pollutants = ["pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone"]
+    df[pollutants] = df[pollutants].clip(lower=0)
+
     df["hour"] = df["time"].dt.hour
     df["day"] = df["time"].dt.day
     df["month"] = df["time"].dt.month

@@ -1,5 +1,6 @@
-data/
+data/*.csv
 __pycache__/
 *.pyc
 .venv/
 AGENTS.md
+.env

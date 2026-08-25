@@ -1,2 +1,8 @@
 pandas==3.0.5
 requests==2.34.2
+python-dotenv==1.2.3
+hopsworks==5.0.5
+pyarrow==25.0.1
+confluent-kafka==2.15.0
+matplotlib==3.11.1
+seaborn==0.13.2

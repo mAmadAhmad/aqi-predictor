@@ -5,9 +5,9 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from compute_features import compute_features
-from constants import CITIES
-from hopsworks_utils import get_feature_store
+from feature_pipeline.compute_features import compute_features
+from feature_pipeline.constants import CITIES
+from feature_pipeline.hopsworks_utils import get_feature_store
 
 AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 WEATHER_URL = "https://archive-api.open-meteo.com/v1/archive"

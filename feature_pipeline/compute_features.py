@@ -32,6 +32,7 @@ def compute_features(aq_df: pd.DataFrame, weather_df: pd.DataFrame) -> pd.DataFr
     df["day"] = df["time"].dt.day
     df["month"] = df["time"].dt.month
     df["day_of_week"] = df["time"].dt.dayofweek
+    df[["hour", "day", "month", "day_of_week"]] = df[["hour", "day", "month", "day_of_week"]].astype("int64")
 
     df["us_aqi_lag_24h"] = df["us_aqi"].shift(24)
     df["us_aqi_lag_168h"] = df["us_aqi"].shift(168)

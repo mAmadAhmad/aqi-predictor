@@ -4,10 +4,13 @@ import hopsworks
 from dotenv import load_dotenv
 
 
-def get_feature_store():
+def get_project():
     load_dotenv()
-    project = hopsworks.login(
+    return hopsworks.login(
         api_key_value=os.environ["HOPSWORKS_API_KEY"],
         project=os.environ["HOPSWORKS_PROJECT"],
     )
-    return project.get_feature_store()
+
+
+def get_feature_store():
+    return get_project().get_feature_store()

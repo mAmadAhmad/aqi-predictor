@@ -10,6 +10,8 @@ def main() -> None:
     df = fg.read()
     print(f"Row count: {len(df)}")
     print(df.head(3))
+    print(df["time"].min(), df["time"].max())
+    print(df["time"].duplicated().sum())
 
 
 if __name__ == "__main__":

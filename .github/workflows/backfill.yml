@@ -16,6 +16,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install -r requirements.txt
+      - run: pip install -r backend/requirements.txt
 
       - run: python -m feature_pipeline.backfill --push

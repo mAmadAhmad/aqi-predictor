@@ -29,6 +29,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/fallback_models/ data/training_results.csv
+          git add data/fallback_models/
           git diff --cached --quiet || git commit -m "chore: update fallback models [skip ci]"
           git push

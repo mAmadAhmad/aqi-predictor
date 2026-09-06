@@ -135,7 +135,7 @@ def _save_and_push(
 
     mr = project.get_model_registry()
     hw_model = mr.python.create_model(name=registry_name, metrics=metrics)
-    hw_model.save(str(local_path))
+    hw_model.save(str(local_path), keep_original_files=True)
     print(f"  pushed '{registry_name}' -> version {hw_model.version}  (RMSE={metrics['rmse']:.3f})")
 
 

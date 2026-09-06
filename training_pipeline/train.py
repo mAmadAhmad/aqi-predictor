@@ -2,7 +2,7 @@
 Trains three rolling-average AQI forecast models (next 24 h, 24–48 h, 48–72 h).
 Picks the best per target, asserts it beats the persistence baseline, saves a
 compressed local copy to data/fallback_models/ (committed to the repo so Render
-can serve predictions without a registry round-trip), and pushes to Hopsworks.
+can serve predictions without a registry round-trip if hopsworks connection fails), and pushes to Hopsworks.
 """
 import argparse
 from pathlib import Path

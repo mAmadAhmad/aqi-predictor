@@ -20,12 +20,13 @@ def main() -> None:
     print("-" * 82)
 
     for name in REQUIRED_MODELS:
-        model = mr.get_model(name=name, version=None)
-        if model is None:
+        versions = mr.get_models(name=name)
+        if not versions:
             print(f"{name:<35} {'—':>8} {'—':>8} {'—':>8} {'—':>8}  MISSING")
             all_ok = False
             continue
 
+        model = max(versions, key=lambda m: m.version)
         metrics = model.training_metrics or {}
         rmse = metrics.get("rmse", "?")
         mae  = metrics.get("mae",  "?")

@@ -42,11 +42,12 @@ DAILY_REGISTRY_NAMES = list(LOCAL_MODEL_FILES.keys())
 
 
 def _download_model(mr: Any, name: str) -> tuple[Any, dict]:
-    model_meta = mr.get_model(name=name, version=None)
-    if model_meta is None:
+    versions = mr.get_models(name=name)
+    if not versions:
         raise RuntimeError(
             f"Model '{name}' not found in registry. Run training_pipeline/train.py first."
         )
+    model_meta = max(versions, key=lambda m: m.version)
     path = model_meta.download()
     metrics = model_meta.training_metrics or {}
     for fname in os.listdir(path):

@@ -1,3 +1,9 @@
+"""
+Trains three rolling-average AQI forecast models (next 24 h, 24–48 h, 48–72 h).
+Picks the best per target, asserts it beats the persistence baseline, saves a
+compressed local copy to data/fallback_models/ (committed to the repo so Render
+can serve predictions without a registry round-trip), and pushes to Hopsworks.
+"""
 import argparse
 from pathlib import Path
 from typing import Any
@@ -16,7 +22,7 @@ FEATURE_GROUP_NAME = "islamabad_aqi_features"
 FEATURE_GROUP_VERSION = 1
 TEST_DAYS = 30
 RESULTS_PATH = Path(__file__).parent.parent / "data" / "training_results.csv"
-MODELS_DIR = Path(__file__).parent.parent / "data" / "models"
+MODELS_DIR = Path(__file__).parent.parent / "data" / "fallback_models"
 
 FEATURE_COLS = [
     "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
@@ -27,7 +33,6 @@ FEATURE_COLS = [
 ]
 
 DAILY_TARGETS = ["avg_aqi_next_24h", "avg_aqi_24_48h", "avg_aqi_48_72h"]
-HOURLY_TARGETS = [f"us_aqi_h{h}" for h in range(1, 25)]
 
 
 def _load_from_hopsworks(project: Any) -> pd.DataFrame:
@@ -40,17 +45,11 @@ def _load_from_hopsworks(project: Any) -> pd.DataFrame:
 
 
 def _compute_targets(df: pd.DataFrame) -> pd.DataFrame:
-    aqi = df["us_aqi"]
-
-    for h in range(1, 25):
-        df[f"us_aqi_h{h}"] = aqi.shift(-h)
-
     # Rolling mean on reversed series avoids materialising 24/48/72 arrays at once.
-    aqi_rev = aqi[::-1]
+    aqi_rev = df["us_aqi"][::-1]
     df["avg_aqi_next_24h"] = aqi_rev.rolling(24).mean().shift(1)[::-1].values
     df["avg_aqi_24_48h"]   = aqi_rev.rolling(24).mean().shift(25)[::-1].values
     df["avg_aqi_48_72h"]   = aqi_rev.rolling(24).mean().shift(49)[::-1].values
-
     return df
 
 
@@ -104,33 +103,6 @@ def _train_daily(
     return rows, fitted
 
 
-def _train_hourly(
-    train: pd.DataFrame, test: pd.DataFrame
-) -> tuple[list[dict], Any]:
-    rows = []
-    all_cols = FEATURE_COLS + HOURLY_TARGETS
-    tr = train[all_cols].dropna()
-    te = test[all_cols].dropna()
-
-    X_tr, Y_tr = tr[FEATURE_COLS].values, tr[HOURLY_TARGETS].values
-    X_te, Y_te = te[FEATURE_COLS].values, te[HOURLY_TARGETS].values
-
-    # RF handles multi-output natively — no wrapper needed, no 24 separate fits.
-    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=2)
-    model.fit(X_tr, Y_tr)
-    Y_pred = model.predict(X_te)
-
-    for i, target in enumerate(HOURLY_TARGETS):
-        m = _metrics(Y_te[:, i], Y_pred[:, i])
-        rows.append({"target": target, "model": "MultiOutputRF", **m})
-
-    for i, target in enumerate(HOURLY_TARGETS):
-        pm = _persistence_metrics(test, target)
-        rows.append({"target": target, "model": "Persistence", **pm})
-
-    return rows, model
-
-
 def _pick_best(results_df: pd.DataFrame, target: str) -> tuple[str, dict[str, float]]:
     candidate_models = ["RandomForest", "Ridge", "XGBoost"]
     subset = results_df[
@@ -159,7 +131,7 @@ def _save_and_push(
 ) -> None:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     local_path = MODELS_DIR / local_filename
-    joblib.dump(model, local_path)
+    joblib.dump(model, local_path, compress=3)
 
     mr = project.get_model_registry()
     hw_model = mr.python.create_model(name=registry_name, metrics=metrics)
@@ -176,7 +148,7 @@ def _print_table(results: pd.DataFrame) -> None:
 
 def _verify(df: pd.DataFrame, train: pd.DataFrame, test: pd.DataFrame) -> None:
     assert train["time"].max() < test["time"].min(), "Train/test time overlap"
-    assert not any(c in FEATURE_COLS for c in DAILY_TARGETS + HOURLY_TARGETS), "Target leaked into features"
+    assert not any(c in FEATURE_COLS for c in DAILY_TARGETS), "Target leaked into features"
     assert train.index.max() < test.index.min(), "Index ordering violated"
 
     pm_day1 = _persistence_metrics(test, "avg_aqi_next_24h")["r2"]
@@ -217,7 +189,7 @@ def main() -> None:
 
     train, test = _split(df)
     _verify(df, train, test)
-    del df  # project object is independent — registry push unaffected
+    del df
 
     print("\nTraining daily-average models...")
     results = []
@@ -228,41 +200,16 @@ def main() -> None:
         results.extend(rows)
         fitted_daily[target] = fitted
 
-    print("Training hourly multi-output model...")
-    hourly_rows, hourly_model = _train_hourly(train, test)
-    results.extend(hourly_rows)
-
     results_df = pd.DataFrame(results)
 
     print("\n--- Daily-average targets ---")
-    _print_table(results_df[results_df["target"].isin(DAILY_TARGETS)])
-
-    print("\n--- Hourly targets (MultiOutputRF vs Persistence, averaged over h1-h24) ---")
-    hourly_summary = (
-        results_df[results_df["target"].isin(HOURLY_TARGETS)]
-        .groupby("model")[["rmse", "mae", "r2"]]
-        .mean()
-        .round(3)
-    )
-    print(hourly_summary.to_string())
+    _print_table(results_df)
 
     RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(RESULTS_PATH, index=False)
     print(f"\nFull results saved --> {RESULTS_PATH}")
 
-    # --- Select best, assert beats persistence, save + push ---
     print("\nSelecting best models and validating against persistence baseline...")
-
-    hourly_rf_rows = results_df[
-        results_df["target"].isin(HOURLY_TARGETS) & (results_df["model"] == "MultiOutputRF")
-    ]
-    hourly_persistence_rows = results_df[
-        results_df["target"].isin(HOURLY_TARGETS) & (results_df["model"] == "Persistence")
-    ]
-    multorf_rmse = hourly_rf_rows["rmse"].mean()
-    persistence_rmse_hourly = hourly_persistence_rows["rmse"].mean()
-    _assert_beats_persistence("MultiOutputRF", multorf_rmse, persistence_rmse_hourly, "hourly")
-
     best_models: list[tuple[str, str, Any, dict[str, float]]] = []
     for target in DAILY_TARGETS:
         best_name, best_metrics = _pick_best(results_df, target)
@@ -273,13 +220,6 @@ def main() -> None:
         best_models.append((target, best_name, fitted_daily[target][best_name], best_metrics))
         print(f"  {target}: best={best_name}  RMSE={best_metrics['rmse']:.3f} < persistence {persistence_rmse:.3f} ✓")
 
-    hourly_metrics = {
-        "rmse": round(multorf_rmse, 4),
-        "mae": round(hourly_rf_rows["mae"].mean(), 4),
-        "r2": round(hourly_rf_rows["r2"].mean(), 4),
-    }
-    print(f"  hourly: MultiOutputRF  RMSE={multorf_rmse:.3f} < persistence {persistence_rmse_hourly:.3f} ✓")
-
     if project is None:
         print("\n[dry-run] Skipping joblib save and registry push (--local mode).")
         return
@@ -288,10 +228,6 @@ def main() -> None:
     for target, best_name, model_obj, metrics in best_models:
         registry_name = f"aqi_{target}_model"
         _save_and_push(model_obj, registry_name, f"{registry_name}.joblib", metrics, project)
-
-    _save_and_push(
-        hourly_model, "aqi_hourly_model", "aqi_hourly_model.joblib", hourly_metrics, project
-    )
 
 
 if __name__ == "__main__":

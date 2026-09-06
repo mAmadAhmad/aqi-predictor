@@ -1,3 +1,9 @@
+"""
+Historical backfill. Meant to be run once (or after a data gap).
+
+Queries the feature group for its latest timestamp before fetching so reruns
+are gap-fills rather than full re-ingestions from 2022.
+"""
 import argparse
 from datetime import date, timedelta
 from pathlib import Path
@@ -69,13 +75,13 @@ def _fetch_chunk(url: str, variables: list[str], lat: float, lon: float, start: 
     return df
 
 
-def _fetch_all_chunks(url: str, variables: list[str], lat: float, lon: float) -> pd.DataFrame:
+def _fetch_all_chunks(url: str, variables: list[str], lat: float, lon: float, start: date) -> pd.DataFrame:
     today = date.today()
-    chunks = _yearly_chunks(BACKFILL_START, today)
+    chunks = _yearly_chunks(start, today)
     frames = []
-    for start, end in chunks:
-        print(f"  fetching {start} → {end}")
-        frames.append(_fetch_chunk(url, variables, lat, lon, start, end))
+    for s, e in chunks:
+        print(f"  fetching {s} → {e}")
+        frames.append(_fetch_chunk(url, variables, lat, lon, s, e))
     df = pd.concat(frames).sort_values("time").drop_duplicates(subset="time", keep="first").reset_index(drop=True)
 
     full_range = pd.date_range(start=df["time"].min(), end=df["time"].max(), freq="h")
@@ -91,11 +97,25 @@ def main() -> None:
 
     lat, lon = CITIES["islamabad"]
 
+    effective_start = BACKFILL_START
+    fg = None
+    try:
+        fs = get_feature_store()
+        fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
+        last_ts = fg.select(["time"]).read()["time"].max()
+        if pd.notna(last_ts):
+            effective_start = (pd.Timestamp(last_ts) + timedelta(hours=1)).date()
+            print(f"Gap-fill from {effective_start} (last known: {last_ts})")
+        else:
+            print(f"Full backfill from {effective_start} (feature group is empty)")
+    except Exception as exc:
+        print(f"Could not query feature store ({exc.__class__.__name__}), using full backfill from {effective_start}")
+
     print("Fetching AQ data...")
-    aq_df = _fetch_all_chunks(AQ_URL, AQ_VARIABLES, lat, lon)
+    aq_df = _fetch_all_chunks(AQ_URL, AQ_VARIABLES, lat, lon, effective_start)
 
     print("Fetching weather data...")
-    weather_df = _fetch_all_chunks(WEATHER_URL, WEATHER_VARIABLES, lat, lon)
+    weather_df = _fetch_all_chunks(WEATHER_URL, WEATHER_VARIABLES, lat, lon, effective_start)
 
     df = compute_features(aq_df, weather_df)
 
@@ -104,11 +124,11 @@ def main() -> None:
     print(f"\nSaved {len(df)} rows → {OUTPUT_PATH}")
     print(f"Columns: {list(df.columns)}")
 
-    if args.push:
-        fs = get_feature_store()
-        fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
+    if args.push and fg is not None:
         fg.insert(df, write_options={"wait_for_job": False})
         print(f"Pushed {len(df)} rows to '{FEATURE_GROUP_NAME}' v{FEATURE_GROUP_VERSION}")
+    elif args.push:
+        print("Cannot push: Hopsworks connection failed during gap-detection.")
 
 
 if __name__ == "__main__":

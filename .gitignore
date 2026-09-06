@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 AGENTS.md
 .env
+data/models/
+data/training_results.csv
+data/snapshot_obs.json

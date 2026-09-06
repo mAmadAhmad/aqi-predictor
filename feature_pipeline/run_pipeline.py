@@ -1,3 +1,10 @@
+"""
+Hourly feature ingestion. Fetches the last 400 h from Open-Meteo, computes
+features, and upserts into the Hopsworks feature group.
+
+400 h rather than 168 h (the longest lag) gives the pipeline enough runway
+to stay correct through API gaps or a missed hourly run.
+"""
 import argparse
 from datetime import datetime, timedelta, timezone
 

@@ -57,15 +57,7 @@ No significant trend across years — the problem is stationary enough that a mo
 
 ![AQI by Hour](data/eda_outputs/eda_aqi_by_hour.png)
 
-AQI peaks in the early morning (6–9 AM) and again in the evening (6–9 PM), corresponding to commute and cooking activity. Lowest values occur around 3 PM when solar mixing disperses pollutants. This intraday pattern makes `hour` a meaningful feature.
-
----
-
-**Day-of-week pattern**
-
-![AQI by Day of Week](data/eda_outputs/eda_aqi_by_dow.png)
-
-Weekdays show slightly higher AQI than weekends — consistent with traffic and industrial activity. The effect is modest compared to seasonal and hourly variation.
+AQI peaks in the work time (9-5). This pattern makes `hour` a meaningful feature.
 
 ---
 
@@ -81,7 +73,7 @@ PM2.5 is the dominant driver of US AQI in Islamabad. The relationship is approxi
 
 ![Correlation Heatmap](data/eda_outputs/eda_correlation_heatmap.png)
 
-`us_aqi` correlates strongly with `pm2_5` (>0.95), and moderately with `pm10` and `nitrogen_dioxide`. Weather features (`temperature_2m`, `precipitation`) show modest but real correlation — temperature negatively correlated (warmer air disperses pollutants), precipitation strongly negative (rain washes out particulates). Lag features were added to capture autocorrelation not visible in this static heatmap.
+`us_aqi` correlates strongly with `pm2_5` (0.57), and also with `pm10`. Weather features (`temperature_2m`, `precipitation`) show modest but real correlation. Lag features were added to capture autocorrelation not visible in this static heatmap.Lag 24 hr is the correlates the strongest with the us-aqi (0.81). 
 
 ---
 

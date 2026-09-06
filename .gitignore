@@ -6,4 +6,4 @@ AGENTS.md
 .env
 data/models/
 data/training_results.csv
-data/snapshot_obs.json
+data/snapshot_obs.jsondata/fallback_models/aqi_hourly_model.joblib
